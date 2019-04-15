@@ -1,12 +1,12 @@
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions._
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{mean, _}
 
 object Batch extends App {
 
   val spark = SparkSession
       .builder
-      .appName("event-tracking")
+      .appName("event-batch")
       .master("local")
       .getOrCreate()
 
@@ -31,11 +31,13 @@ object Batch extends App {
   val df_user = df_structured.groupBy($"user_id")
       .agg(mean("duration"))
       .write
+      .option("header", "true")
       .csv("output/user")
 
   val df_flyer = df_structured.groupBy($"flyer_id", $"merchant_id")
-    .agg(mean("duration"), sum("duration"), count("duration"))
+    .agg(sum("duration"), count("event"), countDistinct("user_id"), mean("duration"))
     .write
+    .option("header", "true")
     .csv("output/flyer")
 
 

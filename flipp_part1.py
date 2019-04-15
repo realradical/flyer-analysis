@@ -13,7 +13,7 @@ regex_pattern = r'[0-9]+'
 
 # Initialize output dataframe
 output_user = pd.DataFrame(columns=["avg_flyer_time"])
-output_flyer = pd.DataFrame(columns=["flyer_id", "merchant_id", "duration_sum", "event_count"])
+output_flyer = pd.DataFrame(columns=["flyer_id", "merchant_id", "duration_sum", "event_count", "unique_user_count"])
 output_flyer = output_flyer.set_index(['flyer_id', 'merchant_id'])
 
 # Algorithm used to calculate the average time on flyer per user and aggregate all flyer events into one df
@@ -28,10 +28,12 @@ for user_id in df.user_id.unique():
             ((df_user.event == "flyer_open") | (df_user.event == "item_open")) ]
     df_flyer_agg = df_user_filtered.groupby(["flyer_id", "merchant_id"]).agg({"duration":['sum'], "event": ['count']})
     df_flyer_agg.columns = ["_".join(x) for x in df_flyer_agg.columns.ravel()]
+    df_flyer_agg["unique_user_count"] = 1
+    df_flyer_agg = df_flyer_agg.astype({"unique_user_count": int})
 
     output_user.loc[user_id] = df_user_filtered.duration.mean()
-    output_flyer = output_flyer.append(df_flyer_agg)
+    output_flyer = output_flyer.append(df_flyer_agg,sort=True)
 
 # Group by flyer_id and merchant_id to calculate total duration, number of events and average duration 
-output_flyer = output_flyer.groupby(["flyer_id", "merchant_id"]).agg(sum)
+output_flyer = output_flyer.groupby(["flyer_id", "merchant_id"]).agg({'duration_sum': np.sum, 'event_count': np.sum, 'unique_user_count': np.sum})
 output_flyer["duration_avg"] = output_flyer.duration_sum/output_flyer.event_count
