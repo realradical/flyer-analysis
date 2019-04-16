@@ -18,7 +18,7 @@ object KafkaProducer {
     val bufferedSource = Source.fromFile("src/main/resources/stream_data.csv")
 
     for (line <- bufferedSource.getLines.drop(1)) {
-      Thread.sleep(50)
+      Thread.sleep(100)
       producer.send(new ProducerRecord[String, String]("user-event", line))
     }
 

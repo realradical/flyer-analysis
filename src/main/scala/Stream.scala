@@ -1,7 +1,11 @@
+import java.sql.Timestamp
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, Trigger}
 import org.apache.spark.sql.types.{StringType, TimestampType}
+
+import util.control.Breaks._
 
 case class InputRow(user_id: String,
                     timestamp: java.sql.Timestamp,
@@ -51,7 +55,7 @@ object Stream {
       ,"split(value,',')[1] as user_id"
       ,"split(value,',')[2] as event"
       ,"split(value,',')[3] as flyer_id"
-      ,"split(value,',')[3] as merchant_id")
+      ,"split(value,',')[4] as merchant_id")
       .select(col("timestamp").cast(TimestampType),
         col("user_id").cast(StringType),
         col("event").cast(StringType),
@@ -73,18 +77,26 @@ object Stream {
 
       var eventList  = List[EventOutput]()
 
-      for (input <- inputs) {
+      implicit val localDateOrdering: Ordering[Timestamp] = Ordering.by(_.getTime)
+      val sortedInputs = inputs.toSeq.sortBy(_.timestamp)
+      for (input <- sortedInputs) {
         if (state.lastEntry != null) {
-          val eventOutput: EventOutput = EventOutput(user_id,
-            state.lastEntry.timestamp,
-            input.timestamp,
-            (input.timestamp.getTime - state.lastEntry.timestamp.getTime)/1000.0,
-            state.lastEntry.flyer_id,
-            state.lastEntry.merchant_id,
-            state.lastEntry.event
-          )
+          breakable {
+            if (input.timestamp.after(state.lastEntry.timestamp) | input.timestamp.equals(state.lastEntry.timestamp)) {
+              val eventOutput: EventOutput = EventOutput(user_id,
+                state.lastEntry.timestamp,
+                input.timestamp,
+                (input.timestamp.getTime - state.lastEntry.timestamp.getTime) / 1000.0,
+                state.lastEntry.flyer_id,
+                state.lastEntry.merchant_id,
+                state.lastEntry.event
+              )
 
-          eventList ::= eventOutput
+              eventList ::= eventOutput
+            } else {
+              break
+            }
+          }
         }
         state = updateStateWithEvent(state, input)
         oldState.update(state)
@@ -94,14 +106,15 @@ object Stream {
 
     }
 
-    val consoleOutput = df_structured.as[InputRow]
+    val writeOutput = df_structured.as[InputRow]
       .groupByKey(_.user_id)
-      .flatMapGroupsWithState(OutputMode.Append, GroupStateTimeout.NoTimeout)(updateAcrossEvents)
+      .flatMapGroupsWithState(OutputMode.Append, GroupStateTimeout.ProcessingTimeTimeout)(updateAcrossEvents)
       .writeStream
       .trigger(Trigger.ProcessingTime("5 seconds"))
 //      .outputMode("update")
       .option("checkpointLocation", "checkpoint/")
       .option("truncate", "false")
+      .option("header", "true")
       .format("csv")
       .start("output/")
       .awaitTermination()
