@@ -44,7 +44,7 @@ object Stream {
       .format("kafka")
       .option("kafka.bootstrap.servers", BOOTSTRAPSERVERS)
       .option("startingOffsets", "latest")
-      .option("subscribe", "user-event")
+      .option("subscribe", "raw-events")
       .load()
 
     //Cast value column to string and reconstruct the dataframe

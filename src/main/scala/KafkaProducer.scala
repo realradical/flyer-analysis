@@ -19,7 +19,7 @@ object KafkaProducer {
 
     for (line <- bufferedSource.getLines.drop(1)) {
       Thread.sleep(100)
-      producer.send(new ProducerRecord[String, String]("user-event", line))
+      producer.send(new ProducerRecord[String, String]("raw-events", line))
     }
 
     producer.close()
